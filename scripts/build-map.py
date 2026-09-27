@@ -43,6 +43,19 @@ for g in w['objects']['countries']['geometries']:
     largest=max(rings,key=lambda r:abs(sum(r[i-1][0]*r[i][1]-r[i][0]*r[i-1][1] for i in range(len(r)))))
     lp=[xy(p) for p in largest];center=[round((min(p[i] for p in lp)+max(p[i] for p in lp))/2,2) for i in [0,1]]
     result.append(dict(id=g.get('id') or 'name:'+g['properties']['name'],name=g['properties']['name'],path=path,bounds=bounds,center=center))
+# Some source features share an ISO code (Australia and Ashmore/Cartier).
+# Combine them into one selectable country without dropping island geometry.
+merged={}
+for c in result:
+    if c['id'] not in merged:
+        merged[c['id']]=c
+        continue
+    old=merged[c['id']]
+    area=lambda b:(b[2]-b[0])*(b[3]-b[1])
+    if area(c['bounds'])>area(old['bounds']):old['name']=c['name'];old['center']=c['center']
+    old['path']+=c['path']
+    old['bounds']=[min(old['bounds'][0],c['bounds'][0]),min(old['bounds'][1],c['bounds'][1]),max(old['bounds'][2],c['bounds'][2]),max(old['bounds'][3],c['bounds'][3])]
+result=list(merged.values())
 result.sort(key=lambda c:c['name'])
 Path('country-data.js').write_text('// Derived from world-atlas 2.0.2 / Natural Earth. See MAP-SOURCES.md.\nconst MAP_COUNTRIES='+json.dumps(result,separators=(',',':'))+';\n')
 print(len(result),'country features;',Path('country-data.js').stat().st_size,'bytes')
