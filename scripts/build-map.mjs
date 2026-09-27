@@ -4,11 +4,15 @@ import {execFileSync} from 'node:child_process';
 import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 const modules=process.env.MAP_BUILD_MODULES||resolve('node_modules');
-const {geoEquirectangular,geoPath}=await import(pathToFileURL(resolve(modules,'d3-geo/src/index.js')));
+const {geoEquirectangular,geoPath,geoArea}=await import(pathToFileURL(resolve(modules,'d3-geo/src/index.js')));
 const collection=JSON.parse(execFileSync('python3',['scripts/build-map.py',...process.argv.slice(2)],{maxBuffer:20e6,encoding:'utf8'}));
 const projection=geoEquirectangular().scale(540/Math.PI).translate([540,270]).precision(.15);
 const path=geoPath(projection).digits(2),merged=new Map();
 for(const f of collection.features){
+ // Simplification can flip a tiny island's winding; prevent complementary globe fills.
+ for(const coordinates of f.geometry.coordinates){
+  if(geoArea({type:'Polygon',coordinates})>2*Math.PI)coordinates.forEach(ring=>ring.reverse());
+ }
  const [[x,y],[r,b]]=path.bounds(f),d=path(f);if(!d)continue;
  const polygons=f.geometry.coordinates.map(coordinates=>({type:'Polygon',coordinates}));
  const largest=polygons.reduce((a,b)=>path.area(a)>path.area(b)?a:b);
