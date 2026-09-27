@@ -1,0 +1,1 @@
+{"name":"culture-atlas","private":true,"scripts":{"build:map":"node scripts/build-map.mjs"},"devDependencies":{"d3-geo":"3.1.1"}}

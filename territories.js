@@ -34,7 +34,7 @@ function renderTerritories(){
 }
 function applyMapBox(){ $('countryMap').setAttribute('viewBox',mapBox.join(' '));drawMapLabels(); }
 function drawMapLabels(){
- const rect=$('mapViewport').getBoundingClientRect(),unit=Math.max(mapBox[2]/Math.max(rect.width,1),mapBox[3]/Math.max(rect.height,1)),font=12*unit;
+ const rect=$('mapViewport').getBoundingClientRect();if(rect.width<1||rect.height<1)return;const unit=Math.max(mapBox[2]/Math.max(rect.width,1),mapBox[3]/Math.max(rect.height,1)),font=12*unit;
  const visible=MAP_COUNTRIES.filter(c=>{const [x,y]=c.center;return x>mapBox[0]&&x<mapBox[0]+mapBox[2]&&y>mapBox[1]&&y<mapBox[1]+mapBox[3]&&(territorySelection.all.has(c.id)||(mapBox[2]<180&&(c.bounds[2]-c.bounds[0])/unit>45&&(c.bounds[3]-c.bounds[1])/unit>30));});
  $('countryLabels').innerHTML=visible.slice(0,60).map(c=>`<text x="${c.center[0]}" y="${c.center[1]}" font-size="${font}" stroke-width="${unit*2.5}" class="${territorySelection.all.has(c.id)?'selected-label':''}">${esc(c.name)}</text>`).join('');
 }
