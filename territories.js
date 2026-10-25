@@ -77,9 +77,12 @@ function scheduleProvinceView(){
  clearTimeout(provinceViewTimer);
  provinceViewTimer=setTimeout(renderProvinceView,120);
 }
+function hideProvinceHover(){ $('provinceHover').hidden=true; }
 async function renderProvinceView(){
  const token=++provinceViewRender,layer=$('allProvincePaths');
  layer.replaceChildren();
+ hideProvinceHover();
+ $('mapViewport').classList.toggle('province-mode',showAllProvinces&&mapBox[2]<=360);
  $('mapProvinces').textContent='Provinces';
  if(!showAllProvinces)return;
  // Province lines are useful at regional scale; at world scale they obscure countries.
@@ -93,7 +96,7 @@ async function renderProvinceView(){
  try{
   const groups=await Promise.all(visible.map(c=>loadProvincePaths(c.id)));
   if(token!==provinceViewRender)return;
-  layer.innerHTML=groups.flat().map(p=>`<path d="${p.path}" fill="none" vector-effect="non-scaling-stroke"/>`).join('');
+  layer.innerHTML=groups.flat().map(p=>`<path data-province="${esc(p.id)}" d="${p.path}" fill-rule="evenodd" vector-effect="non-scaling-stroke"><title>${esc(provinceById.get(p.id)?.name||p.id)} · ${esc(countryLookup.get(provinceById.get(p.id)?.country)?.name||'')}</title></path>`).join('');
  }catch(err){if(token===provinceViewRender)notify(err.message);}
 }
 function applyMapBox(){ $('countryMap').setAttribute('viewBox',mapBox.join(' '));drawMapLabels();scheduleProvinceView(); }
@@ -135,8 +138,19 @@ function initTerritories(){
  $('mapPlus').onclick=()=>mapZoom(1.5);$('mapMinus').onclick=()=>mapZoom(1/1.5);
  document.addEventListener('click',e=>{const b=e.target.closest('[data-focus-country], [data-focus-province]');if(b)focusTerritories([b.dataset.focusCountry||b.dataset.focusProvince]);});
  const vp=$('mapViewport');
+ vp.addEventListener('pointermove',e=>{
+  const id=!mapDragging&&vp.classList.contains('province-mode')?e.target.closest('[data-province]')?.dataset.province:null;
+  const province=provinceById.get(id);
+  if(!province){hideProvinceHover();return;}
+  const hover=$('provinceHover'),rect=vp.getBoundingClientRect();
+  hover.textContent=`${province.name} · ${countryLookup.get(province.country)?.name||''}`;
+  hover.hidden=false;
+  hover.style.left=`${Math.max(8,Math.min(e.clientX-rect.left+14,rect.width-hover.offsetWidth-8))}px`;
+  hover.style.top=`${Math.max(8,e.clientY-rect.top-34)}px`;
+ });
+ vp.addEventListener('pointerleave',hideProvinceHover);
  vp.addEventListener('wheel',e=>{e.preventDefault();mapZoom(Math.exp(-e.deltaY*.0015),mapPoint(e));},{passive:false});
- vp.onpointerdown=e=>{const r=vp.getBoundingClientRect();mapDragging={x:e.clientX,y:e.clientY,box:[...mapBox],unit:Math.max(mapBox[2]/r.width,mapBox[3]/r.height)};vp.setPointerCapture(e.pointerId);};
+ vp.onpointerdown=e=>{hideProvinceHover();const r=vp.getBoundingClientRect();mapDragging={x:e.clientX,y:e.clientY,box:[...mapBox],unit:Math.max(mapBox[2]/r.width,mapBox[3]/r.height)};vp.setPointerCapture(e.pointerId);};
  vp.onpointermove=e=>{if(!mapDragging)return;const d=mapDragging;mapBox=[d.box[0]-(e.clientX-d.x)*d.unit,d.box[1]-(e.clientY-d.y)*d.unit,d.box[2],d.box[3]];applyMapBox();};
  vp.onpointerup=vp.onpointercancel=()=>{mapDragging=null;};
  vp.onkeydown=e=>{const shifts={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]};if(shifts[e.key]){e.preventDefault();mapBox[0]+=shifts[e.key][0]*mapBox[2]*.08;mapBox[1]+=shifts[e.key][1]*mapBox[3]*.08;applyMapBox();}else if(e.key==='+'||e.key==='='){e.preventDefault();mapZoom(1.5);}else if(e.key==='-'){e.preventDefault();mapZoom(1/1.5);}};
