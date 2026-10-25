@@ -1,33 +1,73 @@
-// Country assignments and descendant aggregation are independent of graph layout.
+// Country and province assignments share the existing descendant map behavior.
 const countryLookup=new Map(MAP_COUNTRIES.map(c=>[c.id,c]));
-let countryChoice=new Set(),mapBox=[0,0,1080,540],mapDragging=null,territorySelection={direct:new Set(),inherited:new Set(),all:new Set()},mapRendered=false;
-function aggregateCountries(cultures,selectedId){
- const byId=new Map(cultures.map(c=>[c.id,c]));
- const direct=new Set(byId.get(selectedId)?.countries||[]),all=new Set(direct),children=new Map();
- cultures.forEach(c=>c.parents.forEach(p=>{if(!children.has(p))children.set(p,[]);children.get(p).push(c.id);}));
- const visited=new Set(),queue=byId.has(selectedId)?[selectedId]:[];
- for(let i=0;i<queue.length;i++){const id=queue[i];if(visited.has(id))continue;visited.add(id);(byId.get(id)?.countries||[]).forEach(c=>all.add(c));(children.get(id)||[]).forEach(c=>queue.push(c));}
- return {direct,inherited:new Set([...all].filter(c=>!direct.has(c))),all};
+const MAP_PROVINCE_PATHS={};
+let countryChoice=new Set(),provinceChoice=new Set(),expandedCountry=null,mapBox=[0,0,1080,540],mapDragging=null,mapRendered=false,territoryRender=0;
+let territorySelection=aggregateTerritories([],null);
+const pathRequests=new Map();
+function loadProvincePaths(country){
+ if(MAP_PROVINCE_PATHS[country])return Promise.resolve(MAP_PROVINCE_PATHS[country]);
+ if(pathRequests.has(country))return pathRequests.get(country);
+ const request=new Promise((resolve,reject)=>{
+  const script=document.createElement('script');
+  script.src=`province-paths/${encodeURIComponent(country)}.js`;
+  script.onload=()=>resolve(MAP_PROVINCE_PATHS[country]||[]);
+  script.onerror=()=>reject(Error(`Could not load provinces for ${country}.`));
+  document.head.append(script);
+ });
+ pathRequests.set(country,request);
+ request.catch(()=>pathRequests.delete(country));
+ return request;
 }
-function openCountryPicker(ids){countryChoice=new Set(ids);$('countrySearch').value='';renderCountryOptions();}
-function readCountryPicker(){return [...countryChoice];}
+function openCountryPicker(countries,provinces){
+ countryChoice=new Set(countries);provinceChoice=new Set(provinces);expandedCountry=null;
+ $('countrySearch').value='';renderCountryOptions();
+}
+function readCountryPicker(){return {countries:[...countryChoice],provinces:[...provinceChoice]};}
+function countryState(id){
+ if(countryChoice.has(id))return 'all';
+ const provinces=provincesByCountry.get(id)||[];
+ return provinces.some(p=>provinceChoice.has(p.id))?'some':'none';
+}
 function renderCountryOptions(){
- const q=$('countrySearch').value.trim().toLocaleLowerCase();
- $('countrySelection').textContent=`${countryChoice.size} assigned directly`;
- const matches=MAP_COUNTRIES.filter(c=>c.name.toLocaleLowerCase().includes(q));
- $('countryOptions').innerHTML=matches.map(c=>`<label class="country-option"><input type="checkbox" value="${esc(c.id)}" ${countryChoice.has(c.id)?'checked':''}><span>${esc(c.name)}</span></label>`).join('')||'<p class="hint">No matching countries.</p>';
+ const fold=s=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase();
+ const q=fold($('countrySearch').value.trim());
+ $('countrySelection').textContent=`${countryChoice.size} whole countries · ${provinceChoice.size} individual provinces`;
+ const matches=MAP_COUNTRIES.filter(c=>fold(c.name).includes(q)||(provincesByCountry.get(c.id)||[]).some(p=>fold(p.name).includes(q)));
+ $('countryOptions').innerHTML=matches.map(c=>{
+  const available=provincesByCountry.get(c.id)||[],all=available.length>1?available:[],shown=q&&!fold(c.name).includes(q)?all.filter(p=>fold(p.name).includes(q)):all;
+  const expanded=q?true:expandedCountry===c.id,state=countryState(c.id);
+  return `<div class="country-group"><div class="country-option"><input type="checkbox" data-country-check="${esc(c.id)}" aria-label="Select all of ${esc(c.name)}" ${state==='all'?'checked':''} ${state==='some'?'data-partial="true"':''}><button type="button" class="country-expand" data-expand-country="${esc(c.id)}" aria-expanded="${expanded}" ${!all.length?'disabled':''}>${expanded?'▾':'▸'} ${esc(c.name)} <small>${all.length?`${all.length} ${all.length===1?'region':'regions'}`:'whole country only'}</small></button></div>${expanded&&all.length?`<div class="province-options">${shown.map(p=>`<label class="country-option province-option"><input type="checkbox" data-province-check="${esc(p.id)}" ${countryChoice.has(c.id)||provinceChoice.has(p.id)?'checked':''}><span>${esc(p.name)}</span></label>`).join('')}</div>`:''}</div>`;
+ }).join('')||'<p class="hint">No matching countries or provinces.</p>';
+ $('countryOptions').querySelectorAll('[data-partial]').forEach(input=>input.indeterminate=true);
 }
-function renderTerritories(){
+async function renderTerritories(){
  if(!mapRendered){$('countryPaths').innerHTML=MAP_COUNTRIES.map(c=>`<path data-country="${esc(c.id)}" d="${c.path}" fill-rule="evenodd" vector-effect="non-scaling-stroke"><title>${esc(c.name)}</title></path>`).join('');mapRendered=true;}
- territorySelection=aggregateCountries(data,selected);
- const n=get(selected),{direct,inherited,all}=territorySelection;
+ const token=++territoryRender;
+ territorySelection=aggregateTerritories(data,selected);
+ const n=get(selected),t=territorySelection;
  $('mapTitle').textContent=n?n.name:'Select a culture';
- $('mapStatus').textContent=!n?'Select a culture to see its countries.':all.size?`${all.size} highlighted · ${direct.size} direct · ${inherited.size} from descendants`:'No countries assigned to this culture or its descendants. Use Edit culture to assign countries.';
- $('mapFocus').disabled=!all.size;
- $('countryPaths').querySelectorAll('[data-country]').forEach(path=>{const id=path.dataset.country;path.classList.toggle('direct-country',direct.has(id));path.classList.toggle('inherited-country',inherited.has(id));path.querySelector('title').textContent=countryLookup.get(id).name+(direct.has(id)?' — assigned directly':inherited.has(id)?' — from descendants':'');});
+ const count=t.allCountries.size+t.allProvinces.size;
+ $('mapStatus').textContent=!n?'Select a culture to see its territory.':count?`${t.allCountries.size} whole countries · ${t.allProvinces.size} individual provinces highlighted`:'No territory assigned to this culture or its descendants. Use Edit culture to assign it.';
+ $('mapFocus').disabled=!count;
+ $('countryPaths').querySelectorAll('[data-country]').forEach(path=>{
+  const id=path.dataset.country;path.classList.toggle('direct-country',t.directCountries.has(id));path.classList.toggle('inherited-country',t.inheritedCountries.has(id));
+  path.querySelector('title').textContent=countryLookup.get(id).name+(t.directCountries.has(id)?' — assigned directly':t.inheritedCountries.has(id)?' — from descendants':'');
+ });
+ const needed=new Set([...t.allProvinces].map(id=>provinceById.get(id)?.country).filter(Boolean));
+ $('provincePaths').innerHTML='';
+ try{
+  const groups=await Promise.all([...needed].map(loadProvincePaths));
+  if(token!==territoryRender)return;
+  $('provincePaths').innerHTML=groups.flat().filter(p=>t.allProvinces.has(p.id)).map(p=>{
+   const meta=provinceById.get(p.id),direct=t.directProvinces.has(p.id);
+   return `<path data-province="${esc(p.id)}" class="${direct?'direct-province':'inherited-province'}" d="${p.path}" fill-rule="evenodd" vector-effect="non-scaling-stroke"><title>${esc(meta.name)} — ${direct?'assigned directly':'from descendants'}</title></path>`;
+  }).join('');
+ }catch(err){if(token===territoryRender)notify(err.message);}
  if(n){
   const panel=document.createElement('div');panel.className='country-details';
-  panel.innerHTML=`<h3>COUNTRIES · ${all.size}</h3>${all.size?`<div class="country-chips">${[...all].sort((a,b)=>countryLookup.get(a).name.localeCompare(countryLookup.get(b).name)).map(id=>`<button class="country-chip ${direct.has(id)?'direct':'inherited'}" data-focus-country="${esc(id)}">${esc(countryLookup.get(id).name)}<small>${direct.has(id)?'Direct':'Descendant'}</small></button>`).join('')}</div>`:'<p class="muted">Assign countries in Edit culture.</p>'}`;
+  const countries=[...t.allCountries].sort((a,b)=>countryLookup.get(a).name.localeCompare(countryLookup.get(b).name));
+  const provinces=[...t.allProvinces].sort((a,b)=>provinceById.get(a).name.localeCompare(provinceById.get(b).name));
+  panel.innerHTML=`<h3>TERRITORY · ${count}</h3>${count?`<div class="country-chips">${countries.map(id=>`<button class="country-chip ${t.directCountries.has(id)?'direct':'inherited'}" data-focus-country="${esc(id)}">${esc(countryLookup.get(id).name)}<small>Whole country · ${t.directCountries.has(id)?'Direct':'Descendant'}</small></button>`).join('')}${provinces.map(id=>{const p=provinceById.get(id);return `<button class="country-chip ${t.directProvinces.has(id)?'direct':'inherited'}" data-focus-province="${esc(id)}">${esc(p.name)}<small>${esc(countryLookup.get(p.country)?.name||'')} · ${t.directProvinces.has(id)?'Direct':'Descendant'}</small></button>`}).join('')}</div>`:'<p class="muted">Assign territory in Edit culture.</p>'}`;
   $('details').querySelector('.detail-actions')?.before(panel);
  }
  drawMapLabels();
@@ -35,11 +75,13 @@ function renderTerritories(){
 function applyMapBox(){ $('countryMap').setAttribute('viewBox',mapBox.join(' '));drawMapLabels(); }
 function drawMapLabels(){
  const rect=$('mapViewport').getBoundingClientRect();if(rect.width<1||rect.height<1)return;const unit=Math.max(mapBox[2]/Math.max(rect.width,1),mapBox[3]/Math.max(rect.height,1)),font=12*unit;
- const visible=MAP_COUNTRIES.filter(c=>{const [x,y]=c.center;return x>mapBox[0]&&x<mapBox[0]+mapBox[2]&&y>mapBox[1]&&y<mapBox[1]+mapBox[3]&&(territorySelection.all.has(c.id)||(mapBox[2]<180&&(c.bounds[2]-c.bounds[0])/unit>45&&(c.bounds[3]-c.bounds[1])/unit>30));});
- $('countryLabels').innerHTML=visible.slice(0,60).map(c=>`<text x="${c.center[0]}" y="${c.center[1]}" font-size="${font}" stroke-width="${unit*2.5}" class="${territorySelection.all.has(c.id)?'selected-label':''}">${esc(c.name)}</text>`).join('');
+ const selectedCountries=new Set([...territorySelection.allCountries,...[...territorySelection.allProvinces].map(id=>provinceById.get(id)?.country)]);
+ const visible=MAP_COUNTRIES.filter(c=>{const [x,y]=c.center;return x>mapBox[0]&&x<mapBox[0]+mapBox[2]&&y>mapBox[1]&&y<mapBox[1]+mapBox[3]&&(selectedCountries.has(c.id)||(mapBox[2]<180&&(c.bounds[2]-c.bounds[0])/unit>45&&(c.bounds[3]-c.bounds[1])/unit>30));});
+ $('countryLabels').innerHTML=visible.slice(0,60).map(c=>`<text x="${c.center[0]}" y="${c.center[1]}" font-size="${font}" stroke-width="${unit*2.5}" class="${selectedCountries.has(c.id)?'selected-label':''}">${esc(c.name)}</text>`).join('');
 }
-function focusTerritories(ids=territorySelection.all){
- const countries=[...ids].map(id=>countryLookup.get(id)).filter(Boolean);
+async function focusTerritories(ids=[...territorySelection.allCountries,...territorySelection.allProvinces]){
+ try{await Promise.all([...ids].filter(id=>provinceById.has(id)).map(id=>loadProvincePaths(provinceById.get(id).country)));}catch(err){notify(err.message);return;}
+ const countries=[...ids].map(id=>countryLookup.get(id)||MAP_PROVINCE_PATHS[provinceById.get(id)?.country]?.find(p=>p.id===id)).filter(Boolean);
  if(!countries.length){mapBox=[0,0,1080,540];applyMapBox();return;}
  const x=Math.min(...countries.map(c=>c.bounds[0])),y=Math.min(...countries.map(c=>c.bounds[1])),right=Math.max(...countries.map(c=>c.bounds[2])),bottom=Math.max(...countries.map(c=>c.bounds[3]));
  const width=Math.max(6,right-x),height=Math.max(6,bottom-y);
@@ -53,11 +95,16 @@ function mapZoom(factor,anchor){
 function mapPoint(e){const r=$('mapViewport').getBoundingClientRect(),u=Math.max(mapBox[2]/r.width,mapBox[3]/r.height);return [mapBox[0]+(e.clientX-r.left-(r.width-mapBox[2]/u)/2)*u,mapBox[1]+(e.clientY-r.top-(r.height-mapBox[3]/u)/2)*u];}
 function initTerritories(){
  $('countrySearch').oninput=renderCountryOptions;
- $('countryOptions').onchange=e=>{if(!e.target.matches('input[type=checkbox]'))return;e.target.checked?countryChoice.add(e.target.value):countryChoice.delete(e.target.value);$('countrySelection').textContent=`${countryChoice.size} assigned directly`;};
+ $('countryOptions').onchange=e=>{
+  const input=e.target;if(!input.matches('input[type=checkbox]'))return;
+  const result=input.dataset.countryCheck?changeCountry(countryChoice,provinceChoice,input.dataset.countryCheck,input.checked):changeProvince(countryChoice,provinceChoice,input.dataset.provinceCheck,input.checked);
+  countryChoice=result.countries;provinceChoice=result.provinces;renderCountryOptions();
+ };
+ $('countryOptions').onclick=e=>{const button=e.target.closest('[data-expand-country]');if(button){expandedCountry=expandedCountry===button.dataset.expandCountry?null:button.dataset.expandCountry;renderCountryOptions();}};
  $('mapFocus').onclick=()=>focusTerritories();
  $('mapWorld').onclick=()=>{mapBox=[0,0,1080,540];applyMapBox();};
  $('mapPlus').onclick=()=>mapZoom(1.5);$('mapMinus').onclick=()=>mapZoom(1/1.5);
- document.addEventListener('click',e=>{const b=e.target.closest('[data-focus-country]');if(b)focusTerritories([b.dataset.focusCountry]);});
+ document.addEventListener('click',e=>{const b=e.target.closest('[data-focus-country], [data-focus-province]');if(b)focusTerritories([b.dataset.focusCountry||b.dataset.focusProvince]);});
  const vp=$('mapViewport');
  vp.addEventListener('wheel',e=>{e.preventDefault();mapZoom(Math.exp(-e.deltaY*.0015),mapPoint(e));},{passive:false});
  vp.onpointerdown=e=>{const r=vp.getBoundingClientRect();mapDragging={x:e.clientX,y:e.clientY,box:[...mapBox],unit:Math.max(mapBox[2]/r.width,mapBox[3]/r.height)};vp.setPointerCapture(e.pointerId);};

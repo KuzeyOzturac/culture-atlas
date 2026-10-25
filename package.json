@@ -1,1 +1,11 @@
-{"name":"culture-atlas","private":true,"scripts":{"build:map":"node scripts/build-map.mjs"},"devDependencies":{"d3-geo":"3.1.1"}}
+{
+  "name": "culture-atlas",
+  "private": true,
+  "scripts": {
+    "build:map": "node scripts/build-map.mjs",
+    "test": "node --test tests/*.test.js"
+  },
+  "devDependencies": {
+    "d3-geo": "3.1.1"
+  }
+}
