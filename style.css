@@ -12,6 +12,8 @@ dialog{background:#152232;color:#e1e9f4;border:1px solid #4c617b;border-radius:1
 @media(max-height:620px) and (min-width:651px){.surfaces{grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:minmax(0,1fr)}.map-panel{border-left:1px solid var(--border);border-top:0}body[data-view=tree] .surfaces,body[data-view=map] .surfaces{grid-template-columns:minmax(0,1fr)}.map-meta{display:none}.map-header{flex-wrap:wrap}.bottom>span{display:none}header{padding-top:10px;padding-bottom:10px}}
 @media(prefers-reduced-motion:no-preference){button,summary{transition:background .15s,border-color .15s}}
 #provincePaths path{stroke:#728398;stroke-width:.45;pointer-events:none}
+#allProvincePaths path{stroke:#889bad;stroke-width:.5;stroke-opacity:.8;pointer-events:none}
+#mapProvinces[aria-pressed="true"]{background:#385a71;color:#fff;border-color:#7ca1b5}
 #provincePaths path.direct-province{fill:#b4e4ba;stroke:#e5f9e7;stroke-width:1.1}
 #provincePaths path.inherited-province{fill:#ae94dc;stroke:#dfcaff;stroke-width:1.1}
 .country-option{display:flex;align-items:center}.country-expand{flex:1;text-align:left;border:0;background:transparent;color:inherit;min-height:42px;cursor:pointer}.country-expand small{color:var(--muted);margin-left:5px}.country-expand:disabled{cursor:default}.province-options{padding-left:25px}.province-option{padding-left:8px}.country-option input[data-partial]{accent-color:#b4e4ba}

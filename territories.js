@@ -4,6 +4,7 @@ const MAP_PROVINCE_PATHS={};
 let countryChoice=new Set(),provinceChoice=new Set(),expandedCountry=null,mapBox=[0,0,1080,540],mapDragging=null,mapRendered=false,territoryRender=0;
 let territorySelection=aggregateTerritories([],null);
 const pathRequests=new Map();
+let showAllProvinces=false,provinceViewRender=0,provinceViewTimer;
 function loadProvincePaths(country){
  if(MAP_PROVINCE_PATHS[country])return Promise.resolve(MAP_PROVINCE_PATHS[country]);
  if(pathRequests.has(country))return pathRequests.get(country);
@@ -72,7 +73,30 @@ async function renderTerritories(){
  }
  drawMapLabels();
 }
-function applyMapBox(){ $('countryMap').setAttribute('viewBox',mapBox.join(' '));drawMapLabels(); }
+function scheduleProvinceView(){
+ clearTimeout(provinceViewTimer);
+ provinceViewTimer=setTimeout(renderProvinceView,120);
+}
+async function renderProvinceView(){
+ const token=++provinceViewRender,layer=$('allProvincePaths');
+ layer.replaceChildren();
+ $('mapProvinces').textContent='Provinces';
+ if(!showAllProvinces)return;
+ // Province lines are useful at regional scale; at world scale they obscure countries.
+ if(mapBox[2]>360){$('mapProvinces').textContent='Provinces · zoom in';$('mapProvinces').title='Zoom in to see province boundaries';return;}
+ $('mapProvinces').title='Hide province boundaries';
+ const [x,y,w,h]=mapBox;
+ const visible=MAP_COUNTRIES.filter(c=>{
+  const b=c.bounds;
+  return b[0]<x+w&&b[2]>x&&b[1]<y+h&&b[3]>y&&(provincesByCountry.get(c.id)||[]).length>1;
+ });
+ try{
+  const groups=await Promise.all(visible.map(c=>loadProvincePaths(c.id)));
+  if(token!==provinceViewRender)return;
+  layer.innerHTML=groups.flat().map(p=>`<path d="${p.path}" fill="none" vector-effect="non-scaling-stroke"/>`).join('');
+ }catch(err){if(token===provinceViewRender)notify(err.message);}
+}
+function applyMapBox(){ $('countryMap').setAttribute('viewBox',mapBox.join(' '));drawMapLabels();scheduleProvinceView(); }
 function drawMapLabels(){
  const rect=$('mapViewport').getBoundingClientRect();if(rect.width<1||rect.height<1)return;const unit=Math.max(mapBox[2]/Math.max(rect.width,1),mapBox[3]/Math.max(rect.height,1)),font=12*unit;
  const selectedCountries=new Set([...territorySelection.allCountries,...[...territorySelection.allProvinces].map(id=>provinceById.get(id)?.country)]);
@@ -94,6 +118,11 @@ function mapZoom(factor,anchor){
 }
 function mapPoint(e){const r=$('mapViewport').getBoundingClientRect(),u=Math.max(mapBox[2]/r.width,mapBox[3]/r.height);return [mapBox[0]+(e.clientX-r.left-(r.width-mapBox[2]/u)/2)*u,mapBox[1]+(e.clientY-r.top-(r.height-mapBox[3]/u)/2)*u];}
 function initTerritories(){
+ $('mapProvinces').onclick=()=>{
+  showAllProvinces=!showAllProvinces;
+  $('mapProvinces').setAttribute('aria-pressed',String(showAllProvinces));
+  scheduleProvinceView();
+ };
  $('countrySearch').oninput=renderCountryOptions;
  $('countryOptions').onchange=e=>{
   const input=e.target;if(!input.matches('input[type=checkbox]'))return;
