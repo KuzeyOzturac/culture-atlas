@@ -1,4 +1,4 @@
-"""Build country-sized ADM1 assets from Natural Earth 5.1.1 shapefile.
+"""Build country-sized ADM1 assets from a topology-simplified Natural Earth 5.1.1 shapefile.
 
 Usage: PYTHONPATH=/path/to/pyshp python3 scripts/build-provinces.py /path/to/ne_10m_admin_1_states_provinces.shp
 """
@@ -10,6 +10,8 @@ from pathlib import Path
 
 import pycountry
 import shapefile
+from shapely.geometry import shape as polygon_shape, mapping
+from shapely import union_all
 
 root = Path(__file__).resolve().parent.parent
 countries = json.loads(re.search(r'const MAP_COUNTRIES=(.*);', (root / 'country-data.js').read_text()).group(1))
@@ -18,24 +20,8 @@ special = {'ALD': '248', 'KOS': 'name:Kosovo', 'SDS': '728', 'PSX': '275',
            'SAH': '732', 'SOL': 'name:Somaliland', 'CYN': 'name:N. Cyprus',
            'KAS': 'name:Siachen Glacier', 'IOA': 'name:Indian Ocean Ter.'}
 
-def simplify(points, tolerance=.025):
-    if len(points) < 4:
-        return points
-    x, y = points[0]
-    ex, ey = points[-1]
-    dx, dy = ex-x, ey-y
-    den = dx*dx + dy*dy
-    best, index = -1, 0
-    for i, (px, py) in enumerate(points[1:-1], 1):
-        t = max(0, min(1, ((px-x)*dx + (py-y)*dy)/den)) if den else 0
-        d = (px-x-t*dx)**2 + (py-y-t*dy)**2
-        if d > best:
-            best, index = d, i
-    if best > tolerance*tolerance:
-        return simplify(points[:index+1], tolerance)[:-1] + simplify(points[index:], tolerance)
-    return [points[0], points[-1]]
-
 features = defaultdict(list)
+country_shapes = defaultdict(list)
 reader = shapefile.Reader(sys.argv[1])
 for item in reader.iterShapeRecords():
     record = item.record.as_dict()
@@ -50,14 +36,13 @@ for item in reader.iterShapeRecords():
     for polygon in polygons:
         rings = []
         for ring in polygon:
-            points = simplify(list(ring))
-            if len(points) < 4:
-                points = list(ring)
+            points = list(ring)
             if len(points) >= 4:
                 rings.append(points)
         if rings:
             cleaned.append(rings)
     if cleaned:
+        country_shapes[country].append(polygon_shape({'type': 'MultiPolygon', 'coordinates': cleaned}))
         features[country].append({'id': record['adm1_code'], 'name': record['name'] or record['adm1_code'],
                                   'geometry': {'type': 'MultiPolygon', 'coordinates': cleaned}})
 
@@ -70,4 +55,11 @@ for country, entries in sorted(features.items()):
         {'type': 'Feature', 'id': entry['id'], 'properties': {}, 'geometry': entry['geometry']}
         for entry in entries]}, separators=(',', ':'), ensure_ascii=False))
 (root / 'province-index.js').write_text('const MAP_PROVINCES=' + json.dumps(index, separators=(',', ':'), ensure_ascii=False) + ';\n')
+country_outlines = {}
+for country, shapes in country_shapes.items():
+    outline = union_all(shapes)
+    if sum(part.area for part in shapes) - outline.area > 1e-7:
+        raise ValueError(f'Overlapping province shapes in country {country}')
+    country_outlines[country] = mapping(outline)
+(root / 'country-geo.json').write_text(json.dumps(country_outlines, separators=(',', ':')))
 print(f'{len(index)} provinces in {len(features)} countries')

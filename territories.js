@@ -9,7 +9,7 @@ function loadProvincePaths(country){
  if(pathRequests.has(country))return pathRequests.get(country);
  const request=new Promise((resolve,reject)=>{
   const script=document.createElement('script');
-  script.src=`province-paths/${encodeURIComponent(country)}.js`;
+  script.src=`province-paths/${encodeURIComponent(country)}.js?v=20261025-borders2`;
   script.onload=()=>resolve(MAP_PROVINCE_PATHS[country]||[]);
   script.onerror=()=>reject(Error(`Could not load provinces for ${country}.`));
   document.head.append(script);

@@ -1,2 +1,4 @@
 node_modules/
 province-geo/
+country-geo.json
+build-temp/

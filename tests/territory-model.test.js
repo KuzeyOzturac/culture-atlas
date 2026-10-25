@@ -62,4 +62,9 @@ test('bundled province index has a path for every selectable province',()=>{
  assert.equal(ids.size,atlas.provinces.length);
  assert.equal(pathIds.length,ids.size);
  assert.ok(pathIds.every(id=>ids.has(id)));
+ const countryAtlas=vm.createContext({});
+ vm.runInContext(readFileSync('country-data.js','utf8')+'\nthis.countries=MAP_COUNTRIES',countryAtlas);
+ const countryIds=new Set(countryAtlas.countries.map(c=>c.id));
+ assert.deepEqual([...countries].filter(id=>!countryIds.has(id)),[]);
+ assert.ok(countryAtlas.countries.every(c=>c.path&&c.bounds.every(Number.isFinite)));
 });
