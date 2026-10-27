@@ -5,7 +5,7 @@ Interactive culture ancestry editor built with plain HTML, CSS, and JavaScript.
 - Zero parents: root culture; one: divergence; two: hybridization.
 - Flag images from HTTPS URLs, culture notes, pan/zoom, search, and clickable relatives.
 - Relationship degree counts edges along the shortest undirected parent–child path.
-- Clear graph with an in-app confirmation; JSON import/export.
+- Clear graph with an in-app confirmation; JSON import/export and a text editor.
 - Data is stored in browser localStorage, not on GitHub. Export/import to move between browsers or domains.
 
 ## Run locally
@@ -25,3 +25,21 @@ Country and subdivision assignments are included in JSON exports. Older exports 
 **Add Mashriqi example** appends Mashriqi → Jordanian (Jordan) and Syrian (Syria) without replacing your graph. Use **Focus selection** to zoom to highlighted countries or **World** to reset the map. Country chips in the details panel focus individual countries.
 
 Country and subdivision boundaries are bundled locally; subdivision paths load by country when needed. See [MAP-SOURCES.md](MAP-SOURCES.md). No map keys, map service, or runtime libraries are required.
+
+## Atlas language
+
+Open **Text** to edit the entire atlas as a script. A draft changes the atlas only when you select **Apply text**; syntax and relationship errors leave the current atlas intact. **Reset draft** restores the current atlas. JSON import/export remains available for backups.
+
+```text
+culture "Highlanders" as @"highlanders"
+  flag: "https://example.com/flag.png"
+  territory: country "Canada"
+  note: "Optional context."
+
+diverge "Highlanders" -> "Valleyfolk" as @"valleyfolk"
+  territory: province "Ontario" in "Canada"
+
+hybridize "Highlanders" + "Valleyfolk" -> "Estuary culture" as @"estuary"
+```
+
+Culture IDs after `as @` are optional for new cultures. Exported scripts include them so existing cultures keep their IDs when edited. Parent references can use unique culture names or `@"id"` when names repeat. Countries and provinces are resolved against the bundled map; use their `@"id"` when names are ambiguous. Flag and note lines are optional. A script represents the entire atlas, so applying one can remove cultures omitted from it; the editor confirms removals.
