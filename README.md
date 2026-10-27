@@ -7,6 +7,7 @@ Interactive culture ancestry editor built with plain HTML, CSS, and JavaScript.
 - Relationship degree counts edges along the shortest undirected parent–child path.
 - Clear graph with an in-app confirmation; JSON import/export and a text editor.
 - Data is stored in browser localStorage, not on GitHub. Export/import to move between browsers or domains.
+- Tree, Map, and Text are independent view toggles. Show any combination, or hide all three.
 
 ## Run locally
 
