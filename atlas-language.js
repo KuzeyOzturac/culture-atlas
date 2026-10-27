@@ -17,7 +17,7 @@
  function parseAtlas(source,{countries,provinces,makeId,existingCultures=[]}){
   const definitions=[],lines=source.replace(/\r\n?/g,'\n').split('\n');
   const countryPattern=new RegExp(`^territory:\\s*country\\s+(${quoted})(?:\\s+\\(([1-9][0-9]*)\\))?$`);
-  const provincePattern=new RegExp(`^territory:\\s*province\\s+(${quoted})(?:\\s+\\(([1-9][0-9]*)\\))?\\s+in\\s+(${quoted})(?:\\s+\\(([1-9][0-9]*)\\))?$`);
+  const provincePattern=new RegExp(`^territory:\\s*province\\s+(${quoted})(?:\\s+\\(([1-9][0-9]*)\\))?(?:\\s+in\\s+(${quoted})(?:\\s+\\(([1-9][0-9]*)\\))?)?$`);
   const rootPattern=new RegExp(`^culture\\s+(${quoted})$`);
   const divergePattern=new RegExp(`^diverge\\s+(${reference})\\s*->\\s*(${quoted})$`);
   const hybridPattern=new RegExp(`^hybridize\\s+(${reference})\\s*\\+\\s*(${reference})\\s*->\\s*(${quoted})$`);
@@ -46,8 +46,10 @@
    if(match){current.countries.push(selectPlace(countries,read(match[1],line),match[2],line,'country').id);continue;}
    match=provincePattern.exec(value);
    if(match){
-    const country=selectPlace(countries,read(match[3],line),match[4],line,'country');
-    current.provinces.push(selectPlace(provinces.filter(item=>item.country===country.id),read(match[1],line),match[2],line,'province').id);
+    const name=read(match[1],line);
+    const country=match[3]?selectPlace(countries,read(match[3],line),match[4],line,'country'):null;
+    if(!country&&provinces.filter(item=>key(item.name)===key(name)).length>1)fail(line,`Ambiguous province ${q(name)}. Add its country with in ${q('Country')}.`);
+    current.provinces.push(selectPlace(country?provinces.filter(item=>item.country===country.id):provinces,name,match[2],line,'province').id);
     continue;
    }
    fail(line,'Unknown property. Use flag, note, or territory.');
@@ -91,7 +93,10 @@
    for(const id of culture.countries||[]){const country=countryById.get(id);if(country)result.push(`  territory: country ${placeRef(countries,country)}`);}
    for(const id of culture.provinces||[]){
     const province=provinceById.get(id),country=countryById.get(province?.country);
-    if(province&&country)result.push(`  territory: province ${placeRef(provinces.filter(item=>item.country===country.id),province)} in ${placeRef(countries,country)}`);
+    if(province&&country){
+     const matches=provinces.filter(item=>key(item.name)===key(province.name));
+     result.push(`  territory: province ${matches.length===1?q(province.name):`${placeRef(provinces.filter(item=>item.country===country.id),province)} in ${placeRef(countries,country)}`}`);
+    }
    }
    if(culture.notes)result.push(`  note: ${q(culture.notes)}`);
    return result.join('\n');

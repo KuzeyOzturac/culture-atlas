@@ -39,9 +39,9 @@ culture "Highlanders"
   note: "Optional context."
 
 diverge "Highlanders" -> "Valleyfolk"
-  territory: province "Ontario" in "Canada"
+  territory: province "Ontario"
 
 hybridize "Highlanders" + "Valleyfolk" -> "Estuary culture"
 ```
 
-IDs stay in the saved JSON and never appear in the language. Existing cultures keep their IDs when names match; a single rename also retains its ID. Parent references use culture names. Repeated names use an occurrence number, such as `diverge "Same" (2) -> "Child"` or `province "Victoria" (2) in "Canada"`. Flag and note lines are optional. A script represents the entire atlas, so applying one can remove cultures omitted from it; the editor confirms removals.
+IDs stay in the saved JSON and never appear in the language. Existing cultures keep their IDs when names match; a single rename also retains its ID. Parent references use culture names. Unique province names need no country. For a province name shared worldwide, add its country; repeated names within that country use an occurrence number, such as `province "Victoria" (2) in "Canada"`. Repeated culture names also use an occurrence number, such as `diverge "Same" (2) -> "Child"`. Flag and note lines are optional. A script represents the entire atlas, so applying one can remove cultures omitted from it; the editor confirms removals.

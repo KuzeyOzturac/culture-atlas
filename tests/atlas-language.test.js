@@ -14,6 +14,8 @@ test('JSON data round trips through readable text while keeping internal IDs',()
  ];
  const source=formatAtlas(cultures,env);
  assert.doesNotMatch(source,/@|CAN-3|124|"a"/);
+ assert.match(source,/province "Ontario"/);
+ assert.doesNotMatch(source,/province "Ontario" in/);
  assert.match(source,/province "Victoria" \(2\) in "Canada"/);
  assert.deepEqual(normalize(parseAtlas(source,{...env,makeId,existingCultures:cultures})),cultures);
 });
@@ -46,7 +48,7 @@ test('duplicate culture names use occurrence numbers',()=>{
 });
 
 test('handwritten scripts accept forward references and optional properties',()=>{
- const source='diverge "Root" -> "Branch"\n  territory: province "Ontario" in "Canada"\n\nculture "Root"\n  flag: "https://example.com/root.png"';
+ const source='diverge "Root" -> "Branch"\n  territory: province "Ontario"\n\nculture "Root"\n  flag: "https://example.com/root.png"';
  const result=parseAtlas(source,{...env,makeId});
  assert.equal(result[0].parents[0],result[1].id);
  assert.equal(result[0].provinces[0],'CAN-1');
@@ -60,4 +62,5 @@ test('invalid places and fields report line numbers',()=>{
  assert.throws(()=>parseAtlas('culture "A"\n  period: "1200"',{...env,makeId}),/Line 2: Unknown property/);
  assert.throws(()=>parseAtlas('culture "A"\n  flag: "https://one.test"\n  flag: "https://two.test"',{...env,makeId}),/Line 3: Duplicate flag/);
  assert.throws(()=>parseAtlas('culture "A"\n  territory: province "Victoria" in "Canada"',{...env,makeId}),/Line 2: Ambiguous province/);
+ assert.throws(()=>parseAtlas('culture "A"\n  territory: province "Victoria"',{...env,makeId}),/Line 2: Ambiguous province "Victoria". Add its country/);
 });
