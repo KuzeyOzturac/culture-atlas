@@ -8,6 +8,7 @@ Interactive culture ancestry editor built with plain HTML, CSS, and JavaScript.
 - Clear graph with an in-app confirmation; JSON import/export and a text editor.
 - Data is stored in browser localStorage, not on GitHub. Export/import to move between browsers or domains.
 - Tree, Map, and Text are independent view toggles. Show any combination, or hide all three.
+- On wide screens, drag the dividers between visible views to resize them horizontally; use the arrow keys when a divider is focused. Views stack and scroll on narrow screens.
 
 ## Run locally
 
@@ -32,15 +33,15 @@ Country and subdivision boundaries are bundled locally; subdivision paths load b
 Open **Text** to edit the entire atlas as a script. A draft changes the atlas only when you select **Apply text**; syntax and relationship errors leave the current atlas intact. **Reset draft** restores the current atlas. JSON import/export remains available for backups.
 
 ```text
-culture "Highlanders" as @"highlanders"
+culture "Highlanders"
   flag: "https://example.com/flag.png"
   territory: country "Canada"
   note: "Optional context."
 
-diverge "Highlanders" -> "Valleyfolk" as @"valleyfolk"
+diverge "Highlanders" -> "Valleyfolk"
   territory: province "Ontario" in "Canada"
 
-hybridize "Highlanders" + "Valleyfolk" -> "Estuary culture" as @"estuary"
+hybridize "Highlanders" + "Valleyfolk" -> "Estuary culture"
 ```
 
-Culture IDs after `as @` are optional for new cultures. Exported scripts include them so existing cultures keep their IDs when edited. Parent references can use unique culture names or `@"id"` when names repeat. Countries and provinces are resolved against the bundled map; use their `@"id"` when names are ambiguous. Flag and note lines are optional. A script represents the entire atlas, so applying one can remove cultures omitted from it; the editor confirms removals.
+IDs stay in the saved JSON and never appear in the language. Existing cultures keep their IDs when names match; a single rename also retains its ID. Parent references use culture names. Repeated names use an occurrence number, such as `diverge "Same" (2) -> "Child"` or `province "Victoria" (2) in "Canada"`. Flag and note lines are optional. A script represents the entire atlas, so applying one can remove cultures omitted from it; the editor confirms removals.

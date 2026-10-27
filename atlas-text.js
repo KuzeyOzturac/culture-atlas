@@ -1,6 +1,7 @@
 // The script is a draft until Apply; ordinary visual edits refresh it only when clean.
 let atlasTextDirty=false;
 let atlasTextBase='';
+let atlasTextCultures=[];
 const atlasTextEnvironment=()=>({countries:MAP_COUNTRIES,provinces:MAP_PROVINCES,makeId:()=>crypto.randomUUID()});
 function updateDraftStatus(){
  $('textStatus').textContent=atlasTextBase!==JSON.stringify(data)?'The atlas changed while this draft was open. Applying it will replace those changes.':'Draft has unapplied changes.';
@@ -9,6 +10,7 @@ function updateDraftStatus(){
 window.syncAtlasText=()=>{
  if(atlasTextDirty){updateDraftStatus();return;}
  atlasTextBase=JSON.stringify(data);
+ atlasTextCultures=structuredClone(data);
  $('atlasSource').value=AtlasLanguage.formatAtlas(data,atlasTextEnvironment());
  $('textStatus').textContent='In sync with your atlas.';
  $('textStatus').classList.remove('text-error');
@@ -23,7 +25,7 @@ $('textRestore').onclick=()=>{
 };
 $('textApply').onclick=()=>{
  try{
-  const next=validate(AtlasLanguage.parseAtlas($('atlasSource').value,atlasTextEnvironment()));
+  const next=validate(AtlasLanguage.parseAtlas($('atlasSource').value,{...atlasTextEnvironment(),existingCultures:atlasTextCultures}));
   const nextIds=new Set(next.map(n=>n.id));
   const removed=data.filter(n=>!nextIds.has(n.id)).length;
   const changed=atlasTextBase!==JSON.stringify(data);

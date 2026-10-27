@@ -1,35 +1,63 @@
 const test=require('node:test');
 const assert=require('node:assert/strict');
 const {parseAtlas,formatAtlas}=require('../atlas-language');
-const env={countries:[{id:'124',name:'Canada'},{id:'840',name:'United States'}],provinces:[{id:'CAN-1',name:'Ontario',country:'124'},{id:'CAN-2',name:'Victoria',country:'124'},{id:'USA-1',name:'Victoria',country:'840'}],makeId:()=> 'new-id'};
+const env={countries:[{id:'124',name:'Canada'},{id:'840',name:'United States'}],provinces:[{id:'CAN-1',name:'Ontario',country:'124'},{id:'CAN-2',name:'Victoria',country:'124'},{id:'CAN-3',name:'Victoria',country:'124'},{id:'USA-1',name:'Victoria',country:'840'}]};
+let serial=0;
+const makeId=()=>`new-${++serial}`;
+const normalize=items=>items.map(item=>({id:item.id,name:item.name,parents:item.parents,countries:item.countries,provinces:item.provinces,flag:item.flag,notes:item.notes}));
 
-test('a formatted atlas round trips IDs, relationships, flags, notes, and territories',()=>{
+test('JSON data round trips through readable text while keeping internal IDs',()=>{
  const cultures=[
   {id:'a',name:'Coastfolk',parents:[],countries:['124'],provinces:[],flag:'',notes:''},
   {id:'b',name:'Valleyfolk',parents:['a'],countries:[],provinces:['CAN-1'],flag:'https://example.com/flag.png',notes:'Line one\nLine two'},
-  {id:'c',name:'Estuary culture',parents:['a','b'],countries:[],provinces:['CAN-2'],flag:'',notes:''}
+  {id:'c',name:'Estuary culture',parents:['a','b'],countries:[],provinces:['CAN-3'],flag:'',notes:''}
  ];
- assert.deepEqual(parseAtlas(formatAtlas(cultures,env),env),cultures);
+ const source=formatAtlas(cultures,env);
+ assert.doesNotMatch(source,/@|CAN-3|124|"a"/);
+ assert.match(source,/province "Victoria" \(2\) in "Canada"/);
+ assert.deepEqual(normalize(parseAtlas(source,{...env,makeId,existingCultures:cultures})),cultures);
 });
 
-test('handwritten scripts allow forward references and optional fields',()=>{
+test('a single culture rename keeps its hidden ID',()=>{
+ const cultures=[{id:'a',name:'Old',parents:[],countries:[],provinces:[],flag:'',notes:''}];
+ assert.equal(parseAtlas('culture "New"',{...env,makeId,existingCultures:cultures})[0].id,'a');
+});
+
+test('renaming one of two same-named cultures keeps the other culture at its position',()=>{
+ const existing=[
+  {id:'a',name:'Same',parents:[],countries:[],provinces:[],flag:'',notes:''},
+  {id:'b',name:'Same',parents:[],countries:[],provinces:[],flag:'',notes:''}
+ ];
+ const result=parseAtlas('culture "Renamed"\n\nculture "Same"',{...env,makeId,existingCultures:existing});
+ assert.deepEqual(result.map(item=>item.id),['a','b']);
+});
+
+test('duplicate culture names use occurrence numbers',()=>{
+ const cultures=[
+  {id:'a',name:'Same',parents:[],countries:[],provinces:[],flag:'',notes:''},
+  {id:'b',name:'Same',parents:[],countries:[],provinces:[],flag:'',notes:''},
+  {id:'c',name:'Child',parents:['a'],countries:[],provinces:[],flag:'',notes:''}
+ ];
+ const source=formatAtlas(cultures,env);
+ assert.match(source,/culture "Same"/);
+ assert.match(source,/diverge "Same" \(1\) -> "Child"/);
+ assert.deepEqual(normalize(parseAtlas(source,{...env,makeId,existingCultures:cultures})),cultures);
+ assert.throws(()=>parseAtlas('culture "Same"\n\nculture "Same"\n\ndiverge "Same" -> "Child"',{...env,makeId}),/Ambiguous parent culture/);
+});
+
+test('handwritten scripts accept forward references and optional properties',()=>{
  const source='diverge "Root" -> "Branch"\n  territory: province "Ontario" in "Canada"\n\nculture "Root"\n  flag: "https://example.com/root.png"';
- let next=0;
- assert.deepEqual(parseAtlas(source,{...env,makeId:()=>`new-${++next}`}),[
-  {id:'new-1',name:'Branch',parents:['new-2'],countries:[],provinces:['CAN-1'],flag:'',notes:''},
-  {id:'new-2',name:'Root',parents:[],countries:[],provinces:[],flag:'https://example.com/root.png',notes:''}
- ]);
+ const result=parseAtlas(source,{...env,makeId});
+ assert.equal(result[0].parents[0],result[1].id);
+ assert.equal(result[0].provinces[0],'CAN-1');
+ assert.equal(result[1].flag,'https://example.com/root.png');
+ assert.equal(result[0].notes,'');
 });
 
-test('ambiguous names require stable ID references',()=>{
- const source='culture "Same" as @"a"\n\nculture "Same" as @"b"\n\ndiverge "Same" -> "Child" as @"c"';
- assert.throws(()=>parseAtlas(source,env),/Line 5: Ambiguous parent/);
- assert.equal(parseAtlas(source.replace('diverge "Same"','diverge @"a"'),env)[2].parents[0],'a');
-});
-
-test('invalid map names and unknown fields fail with line numbers',()=>{
- assert.throws(()=>parseAtlas('culture "A"\n  territory: province "Ontario" in "Atlantis"',env),/Line 2: Unknown country/);
- assert.throws(()=>parseAtlas('culture "A"\n  period: "1200"',env),/Line 2: Unknown property/);
- assert.throws(()=>parseAtlas('culture "A"\n  flag: "https://one.test"\n  flag: "https://two.test"',env),/Line 3: Duplicate flag/);
- assert.throws(()=>parseAtlas('culture "A"\n  territory: province @"CAN-1" in "United States"',env),/Line 2: Province does not belong/);
+test('invalid places and fields report line numbers',()=>{
+ assert.throws(()=>parseAtlas('culture "A" as @"internal-id"',{...env,makeId}),/Line 1: Expected culture/);
+ assert.throws(()=>parseAtlas('culture "A"\n  territory: province "Ontario" in "Atlantis"',{...env,makeId}),/Line 2: Unknown country/);
+ assert.throws(()=>parseAtlas('culture "A"\n  period: "1200"',{...env,makeId}),/Line 2: Unknown property/);
+ assert.throws(()=>parseAtlas('culture "A"\n  flag: "https://one.test"\n  flag: "https://two.test"',{...env,makeId}),/Line 3: Duplicate flag/);
+ assert.throws(()=>parseAtlas('culture "A"\n  territory: province "Victoria" in "Canada"',{...env,makeId}),/Line 2: Ambiguous province/);
 });
