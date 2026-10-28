@@ -63,6 +63,7 @@ document.querySelectorAll('button[data-view]').forEach(b=>b.onclick=()=>{
  const view=b.dataset.view,added=!workspaceViews.has(view);
  added?workspaceViews.add(view):workspaceViews.delete(view);
  syncWorkspace();
+ if(added&&view==='text')$('atlasSource').focus();
  if(added&&innerWidth<1400)requestAnimationFrame(()=>document.querySelector({tree:'.workspace',map:'.map-panel',text:'.text-panel'}[view]).scrollIntoView({block:'nearest',behavior:'smooth'}));
 });
 $('focusNode').onclick=()=>keepSelectedVisible(true);
