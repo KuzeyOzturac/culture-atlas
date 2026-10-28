@@ -35,13 +35,15 @@ Open **Text** to edit the entire atlas as a script. A draft changes the atlas on
 ```text
 culture "Highlanders"
   flag: "https://example.com/flag.png"
-  territory: country "Canada"
+  territory: country "Canada", "United States of America"
   note: "Optional context."
 
 diverge "Highlanders" -> "Valleyfolk"
-  territory: province "Ontario"
+  territory: province "Ontario", "Quebec"
 
 hybridize "Highlanders" + "Valleyfolk" -> "Estuary culture"
 ```
+
+A territory line can contain a comma-separated list of countries, provinces, or both. After the first item of a type, its `country` or `province` prefix may be omitted until the type changes. In the editor, Tab indents and Shift+Tab outdents selected lines.
 
 IDs stay in the saved JSON and never appear in the language. Existing cultures keep their IDs when names match; a single rename also retains its ID. Parent references use culture names. Unique province names need no country. For a province name shared worldwide, add its country; repeated names within that country use an occurrence number, such as `province "Victoria" (2) in "Canada"`. Repeated culture names also use an occurrence number, such as `diverge "Same" (2) -> "Child"`. Flag and note lines are optional. A script represents the entire atlas, so applying one can remove cultures omitted from it; the editor confirms removals.

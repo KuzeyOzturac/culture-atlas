@@ -19,6 +19,21 @@ $('atlasSource').addEventListener('input',()=>{
  atlasTextDirty=true;
  updateDraftStatus();
 });
+$('atlasSource').addEventListener('keydown',event=>{
+ if(event.key!=='Tab')return;
+ event.preventDefault();
+ const editor=event.currentTarget,start=editor.selectionStart,end=editor.selectionEnd;
+ if(start===end&&!event.shiftKey){editor.setRangeText('  ',start,end,'end');editor.dispatchEvent(new Event('input',{bubbles:true}));return;}
+ const lineStart=editor.value.lastIndexOf('\n',start-1)+1;
+ const last=end>start&&editor.value[end-1]==='\n'?end-1:end;
+ const lineEnd=editor.value.indexOf('\n',last);
+ const blockEnd=lineEnd<0?editor.value.length:lineEnd;
+ const block=editor.value.slice(lineStart,blockEnd);
+ const changed=block.split('\n').map(line=>event.shiftKey?line.replace(/^ {1,2}/,''):'  '+line).join('\n');
+ editor.setRangeText(changed,lineStart,blockEnd,start===end?'end':'select');
+ if(start===end){const cursor=Math.max(lineStart,start+changed.length-block.length);editor.setSelectionRange(cursor,cursor);}
+ if(changed!==block)editor.dispatchEvent(new Event('input',{bubbles:true}));
+});
 $('textRestore').onclick=()=>{
  if(atlasTextDirty&&!confirm('Discard your text draft and restore the current atlas?'))return;
  atlasTextDirty=false;syncAtlasText();

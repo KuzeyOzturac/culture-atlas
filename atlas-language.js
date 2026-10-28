@@ -16,8 +16,8 @@
  }
  function parseAtlas(source,{countries,provinces,makeId,existingCultures=[]}){
   const definitions=[],lines=source.replace(/\r\n?/g,'\n').split('\n');
-  const countryPattern=new RegExp(`^territory:\\s*country\\s+(${quoted})(?:\\s+\\(([1-9][0-9]*)\\))?$`);
-  const provincePattern=new RegExp(`^territory:\\s*province\\s+(${quoted})(?:\\s+\\(([1-9][0-9]*)\\))?(?:\\s+in\\s+(${quoted})(?:\\s+\\(([1-9][0-9]*)\\))?)?$`);
+  const countryPattern=new RegExp(`^(${quoted})(?:\\s+\\(([1-9][0-9]*)\\))?$`);
+  const provincePattern=new RegExp(`^(${quoted})(?:\\s+\\(([1-9][0-9]*)\\))?(?:\\s+in\\s+(${quoted})(?:\\s+\\(([1-9][0-9]*)\\))?)?$`);
   const rootPattern=new RegExp(`^culture\\s+(${quoted})$`);
   const divergePattern=new RegExp(`^diverge\\s+(${reference})\\s*->\\s*(${quoted})$`);
   const hybridPattern=new RegExp(`^hybridize\\s+(${reference})\\s*\\+\\s*(${reference})\\s*->\\s*(${quoted})$`);
@@ -42,14 +42,26 @@
     if(current[`_${property}Seen`])fail(line,`Duplicate ${match[1]} property.`);
     current[property]=read(match[2],line);current[`_${property}Seen`]=true;continue;
    }
-   match=countryPattern.exec(value);
-   if(match){current.countries.push(selectPlace(countries,read(match[1],line),match[2],line,'country').id);continue;}
-   match=provincePattern.exec(value);
-   if(match){
-    const name=read(match[1],line);
-    const country=match[3]?selectPlace(countries,read(match[3],line),match[4],line,'country'):null;
-    if(!country&&provinces.filter(item=>key(item.name)===key(name)).length>1)fail(line,`Ambiguous province ${q(name)}. Add its country with in ${q('Country')}.`);
-    current.provinces.push(selectPlace(country?provinces.filter(item=>item.country===country.id):provinces,name,match[2],line,'province').id);
+   if(value.startsWith('territory:')){
+    let part='',quotedText=false,escaped=false,kind='';
+    const items=[];
+    for(const char of value.slice('territory:'.length)){
+     if(char===','&&!quotedText){items.push(part.trim());part='';continue;}
+     part+=char;
+     if(escaped)escaped=false;else if(char==='\\'&&quotedText)escaped=true;else if(char==='"')quotedText=!quotedText;
+    }
+    items.push(part.trim());
+    for(const item of items){
+     const typed=/^(country|province)\s+/.exec(item);
+     if(typed)kind=typed[1];
+     const text=typed?item.slice(typed[0].length):item;
+     match=(kind==='country'?countryPattern:kind==='province'?provincePattern:null)?.exec(text);
+     if(!match)fail(line,'Invalid territory list. Use country or province followed by quoted names, separated by commas.');
+     if(kind==='country'){current.countries.push(selectPlace(countries,read(match[1],line),match[2],line,'country').id);continue;}
+     const name=read(match[1],line),country=match[3]?selectPlace(countries,read(match[3],line),match[4],line,'country'):null;
+     if(!country&&provinces.filter(place=>key(place.name)===key(name)).length>1)fail(line,`Ambiguous province ${q(name)}. Add its country with in ${q('Country')}.`);
+     current.provinces.push(selectPlace(country?provinces.filter(place=>place.country===country.id):provinces,name,match[2],line,'province').id);
+    }
     continue;
    }
    fail(line,'Unknown property. Use flag, note, or territory.');
@@ -90,14 +102,16 @@
    const head=culture.parents.length===2?`hybridize ${parentRef(culture.parents[0])} + ${parentRef(culture.parents[1])} -> ${q(culture.name)}`:culture.parents.length===1?`diverge ${parentRef(culture.parents[0])} -> ${q(culture.name)}`:`culture ${q(culture.name)}`;
    const result=[head];
    if(culture.flag)result.push(`  flag: ${q(culture.flag)}`);
-   for(const id of culture.countries||[]){const country=countryById.get(id);if(country)result.push(`  territory: country ${placeRef(countries,country)}`);}
+   const territories=[];
+   for(const id of culture.countries||[]){const country=countryById.get(id);if(country)territories.push({kind:'country',text:placeRef(countries,country)});}
    for(const id of culture.provinces||[]){
     const province=provinceById.get(id),country=countryById.get(province?.country);
     if(province&&country){
      const matches=provinces.filter(item=>key(item.name)===key(province.name));
-     result.push(`  territory: province ${matches.length===1?q(province.name):`${placeRef(provinces.filter(item=>item.country===country.id),province)} in ${placeRef(countries,country)}`}`);
+     territories.push({kind:'province',text:matches.length===1?q(province.name):`${placeRef(provinces.filter(item=>item.country===country.id),province)} in ${placeRef(countries,country)}`});
     }
    }
+   if(territories.length)result.push(`  territory: ${territories.map((place,index)=>`${index&&territories[index-1].kind===place.kind?'':place.kind+' '}${place.text}`).join(', ')}`);
    if(culture.notes)result.push(`  note: ${q(culture.notes)}`);
    return result.join('\n');
   }).join('\n\n');

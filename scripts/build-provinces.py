@@ -5,7 +5,7 @@ Usage: PYTHONPATH=/path/to/pyshp python3 scripts/build-provinces.py /path/to/ne_
 import json
 import re
 import sys
-from collections import defaultdict
+from collections import Counter, defaultdict
 from pathlib import Path
 
 import pycountry
@@ -44,13 +44,17 @@ for item in reader.iterShapeRecords():
     if cleaned:
         country_shapes[country].append(polygon_shape({'type': 'MultiPolygon', 'coordinates': cleaned}))
         features[country].append({'id': record['adm1_code'], 'name': record['name'] or record['adm1_code'],
+                                  'type': record.get('type_en') or '',
                                   'geometry': {'type': 'MultiPolygon', 'coordinates': cleaned}})
 
 out = root / 'province-geo'
 out.mkdir(exist_ok=True)
 index = []
 for country, entries in sorted(features.items()):
-    index.extend({'id': entry['id'], 'name': entry['name'], 'country': country} for entry in entries)
+    duplicates = Counter(entry['name'] for entry in entries)
+    index.extend({'id': entry['id'], 'name': entry['name'], 'country': country,
+                  **({'type': entry['type']} if duplicates[entry['name']] > 1 and entry['type'] else {})}
+                 for entry in entries)
     (out / f'{country}.json').write_text(json.dumps({'type': 'FeatureCollection', 'features': [
         {'type': 'Feature', 'id': entry['id'], 'properties': {}, 'geometry': entry['geometry']}
         for entry in entries]}, separators=(',', ':'), ensure_ascii=False))
